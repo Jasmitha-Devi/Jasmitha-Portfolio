@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: portfolio
+    description: Portfolio public data, contact, and assistant operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /portfolio/github:
+    get:
+      operationId: getPortfolioGithub
+      tags: [portfolio]
+      summary: Get public GitHub repositories
+      description: Returns a short, cached list of public repositories for the portfolio owner.
+      responses:
+        "200":
+          description: Public repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitHubRepository"
+        "502":
+          description: GitHub could not be reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /portfolio/contact:
+    post:
+      operationId: submitPortfolioContact
+      tags: [portfolio]
+      summary: Send a portfolio contact message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactMessageInput"
+      responses:
+        "200":
+          description: The message was delivered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactMessageResult"
+        "400":
+          description: Invalid contact message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Email delivery is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /portfolio/chat/status:
+    get:
+      operationId: getPortfolioChatStatus
+      tags: [portfolio]
+      summary: Get the assistant availability mode
+      responses:
+        "200":
+          description: Current assistant mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatStatus"
+  /portfolio/chat:
+    post:
+      operationId: streamPortfolioChat
+      tags: [portfolio]
+      summary: Stream a grounded portfolio assistant response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatInput"
+      responses:
+        "200":
+          description: Server-sent events containing response text deltas and a completion event
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          description: Invalid chat input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +134,93 @@ components:
           type: string
       required:
         - status
+    GitHubRepository:
+      type: object
+      required: [name, description, language, updatedAt, htmlUrl, stars]
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+        htmlUrl:
+          type: string
+          format: uri
+        stars:
+          type: integer
+          minimum: 0
+    ContactMessageInput:
+      type: object
+      required: [name, email, subject, message]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 160
+        message:
+          type: string
+          minLength: 10
+          maxLength: 4000
+        website:
+          type: string
+          maxLength: 200
+    ContactMessageResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [sent]
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ChatInput:
+      type: object
+      required: [message, history, audience]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        history:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        audience:
+          type: string
+          enum: [recruiter, beginner, developer, judge]
+    ChatStatus:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [ai, offline]
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
 

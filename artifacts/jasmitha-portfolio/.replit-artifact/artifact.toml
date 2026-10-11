@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Jasmitha — Developer Portfolio"
+description = "A personal developer portfolio showcasing Harvest Shield, Python Code Complexity Lab, and ExpiryGuard, with honest project details, working feature links, contact tools, and a portfolio chatbot."
+version = "1.0.0"
+id = "artifacts/jasmitha-portfolio"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20939
+
+[services.development]
+run = "pnpm --filter @workspace/jasmitha-portfolio run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jasmitha-portfolio", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jasmitha-portfolio/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20939"
+BASE_PATH = "/"
