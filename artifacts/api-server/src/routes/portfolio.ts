@@ -18,7 +18,10 @@ const githubProfile = portfolioContent.codingProfiles.find(
   (profile) => profile.name.toLowerCase() === "github",
 );
 let githubCache:
-  | { expiresAt: number; repositories: ReturnType<typeof GetPortfolioGithubResponse.parse> }
+  | {
+      expiresAt: number;
+      repositories: ReturnType<typeof GetPortfolioGithubResponse.parse>;
+    }
   | undefined;
 
 function safeString(value: unknown, maxLength = 120): string | undefined {
@@ -36,15 +39,21 @@ function logProviderFailure(
 ) {
   const key = getOpenAIApiKey();
   const rawMessage = error instanceof Error ? error.message : String(error);
-  const safeMessage = key ? rawMessage.split(key).join("[redacted]") : rawMessage;
+  const safeMessage = key
+    ? rawMessage.split(key).join("[redacted]")
+    : rawMessage;
 
   logger.error(
     {
       errorName: error instanceof Error ? error.name : "UnknownError",
       errorMessage: safeMessage.slice(0, 300),
       ...(statusCode === undefined ? {} : { providerStatus: statusCode }),
-      ...(safeString(details?.type) ? { providerErrorType: safeString(details?.type) } : {}),
-      ...(safeString(details?.code) ? { providerErrorCode: safeString(details?.code) } : {}),
+      ...(safeString(details?.type)
+        ? { providerErrorType: safeString(details?.type) }
+        : {}),
+      ...(safeString(details?.code)
+        ? { providerErrorCode: safeString(details?.code) }
+        : {}),
     },
     "Portfolio AI provider request failed",
   );
@@ -93,19 +102,27 @@ router.get("/portfolio/github", async (_req, res) => {
       },
     );
     if (!response.ok) {
-      logger.error({ upstreamStatus: response.status }, "GitHub repository request failed");
+      logger.error(
+        { upstreamStatus: response.status },
+        "GitHub repository request failed",
+      );
       return res.status(502).json({ error: "GitHub could not be reached" });
     }
 
     const upstream: unknown = await response.json();
     if (!Array.isArray(upstream)) {
       logger.error("GitHub returned an unexpected repository response");
-      return res.status(502).json({ error: "GitHub returned an unexpected response" });
+      return res
+        .status(502)
+        .json({ error: "GitHub returned an unexpected response" });
     }
 
     const repositories = GetPortfolioGithubResponse.parse(
       upstream
-        .filter((repo) => repo && typeof repo === "object" && !("fork" in repo && repo.fork))
+        .filter(
+          (repo) =>
+            repo && typeof repo === "object" && !("fork" in repo && repo.fork),
+        )
         .map((repo) => {
           const item = repo as Record<string, unknown>;
           return {
@@ -133,7 +150,9 @@ router.get("/portfolio/github", async (_req, res) => {
 router.post("/portfolio/contact", (req, res) => {
   const parsed = SubmitPortfolioContactBody.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Please check the contact form fields." });
+    return res
+      .status(400)
+      .json({ error: "Please check the contact form fields." });
   }
   if (parsed.data.website) {
     return res.json({ status: "sent" });
@@ -176,41 +195,48 @@ async function handleChat(req: Request, res: Response) {
     const audienceStyle: Record<typeof input.audience, string> = {
       recruiter: "Be concise and clear for a recruiter.",
       beginner: "Use beginner-friendly explanations and define jargon.",
-      developer: "Use precise technical language without overstating implementation.",
-      judge: "Summarize project intent, implementation, and limits for a hackathon judge.",
+      developer:
+        "Use precise technical language without overstating implementation.",
+      judge:
+        "Summarize project intent, implementation, and limits for a hackathon judge.",
     };
     const context = portfolioContextFor(input.message);
-    const providerResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
+    const providerResponse = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || "gemini-3.1-flash-lite",
+          stream: true,
+          messages: [
+            {
+              role: "system",
+              content:
+                `You are Jas AI, a friendly assistant for Jasmitha's developer portfolio. ` +
+                `Answer questions about her only using the supplied portfolio context. ` +
+                `Do not invent experience, project capabilities, performance results, or claims. ` +
+                `If context does not support an answer, say so. ${audienceStyle[input.audience]} ` +
+                `Portfolio context: ${context}`,
+            },
+            ...input.history,
+            { role: "user", content: input.message },
+          ],
+        }),
+        signal: controller.signal,
       },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        stream: true,
-        messages: [
-          {
-            role: "system",
-            content:
-              `You are Jas AI, a friendly assistant for Jasmitha's developer portfolio. ` +
-              `Answer questions about her only using the supplied portfolio context. ` +
-              `Do not invent experience, project capabilities, performance results, or claims. ` +
-              `If context does not support an answer, say so. ${audienceStyle[input.audience]} ` +
-              `Portfolio context: ${context}`,
-          },
-          ...input.history,
-          { role: "user", content: input.message },
-        ],
-      }),
-      signal: controller.signal,
-    });
+    );
 
     if (!providerResponse.ok) {
-      const providerBody = (await providerResponse.json().catch(() => null)) as
-        | { error?: { type?: unknown; code?: unknown } }
-        | null;
+      const providerBody = (await providerResponse
+        .json()
+        .catch(() => null)) as {
+        error?: { type?: unknown; code?: unknown };
+      } | null;
       const safeDetails = providerBody?.error ?? {};
       logProviderFailure(
         new Error(`AI provider returned HTTP ${providerResponse.status}`),
@@ -218,12 +244,17 @@ async function handleChat(req: Request, res: Response) {
         safeDetails,
       );
       const status = providerResponse.status === 429 ? 429 : 502;
-      return res.status(status).json({ error: aiErrorForStatus(providerResponse.status) });
+      return res
+        .status(status)
+        .json({ error: aiErrorForStatus(providerResponse.status) });
     }
     if (!providerResponse.body) {
-      logProviderFailure(new Error("AI provider response did not include a stream"));
+      logProviderFailure(
+        new Error("AI provider response did not include a stream"),
+      );
       return res.status(502).json({
-        error: "AI provider is temporarily unavailable. Please try again shortly.",
+        error:
+          "AI provider is temporarily unavailable. Please try again shortly.",
       });
     }
 
@@ -259,7 +290,10 @@ async function handleChat(req: Request, res: Response) {
           if (typeof delta === "string" && delta) sendEvent(res, { delta });
         } catch (error) {
           logProviderFailure(error);
-          sendEvent(res, { error: "AI provider is temporarily unavailable. Please try again shortly." });
+          sendEvent(res, {
+            error:
+              "AI provider is temporarily unavailable. Please try again shortly.",
+          });
           sendDone(res);
           return res.end();
         }
@@ -276,10 +310,14 @@ async function handleChat(req: Request, res: Response) {
       logProviderFailure(error);
       if (!res.headersSent) {
         return res.status(502).json({
-          error: "AI provider is temporarily unavailable. Please try again shortly.",
+          error:
+            "AI provider is temporarily unavailable. Please try again shortly.",
         });
       }
-      sendEvent(res, { error: "AI provider is temporarily unavailable. Please try again shortly." });
+      sendEvent(res, {
+        error:
+          "AI provider is temporarily unavailable. Please try again shortly.",
+      });
       sendDone(res);
       return res.end();
     }
@@ -287,10 +325,14 @@ async function handleChat(req: Request, res: Response) {
     logProviderFailure(error);
     if (!res.headersSent) {
       return res.status(502).json({
-        error: "AI provider is temporarily unavailable. Please try again shortly.",
+        error:
+          "AI provider is temporarily unavailable. Please try again shortly.",
       });
     }
-    sendEvent(res, { error: "AI provider is temporarily unavailable. Please try again shortly." });
+    sendEvent(res, {
+      error:
+        "AI provider is temporarily unavailable. Please try again shortly.",
+    });
     sendDone(res);
     return res.end();
   } finally {
